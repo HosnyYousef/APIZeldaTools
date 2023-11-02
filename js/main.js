@@ -2,22 +2,23 @@
 
 document.querySelector('.click').addEventListener('click', zeldaGame)
 
+let zeldaArray = []
+
 function zeldaGame () {
     let game = document.querySelector('input').value
     
     
-    let zeldaArray = []
-
+ 
     fetch(`https://zelda.fanapis.com/api/games?${game}`)
     .then(res => res.json()) // parse response as JSON
     .then(data => {
-      for(let x = 0; x < data.length; x++) {
-        zeldaArray.push(data[x])
+      for(let x = 0; x < data.data.length; x++) {
+        zeldaArray.push(data.data[x])
       }
 
       // let resultBox = document.querySelector('.result')
       // resultBox.innerHTML = data.description
-      console.log(data)
+      console.log(zeldaArray)
       //console.log(data.data.creatures.food)
       document.querySelector('h2').innerText = zeldaArray[0].name
       document.querySelector('h3').innerText = zeldaArray[0].released_date
@@ -27,6 +28,27 @@ function zeldaGame () {
         console.log(`error ${err}`)
     })
  
+
+    start()    
+}
+
+function showDrink() {
+  document.querySelector('h2').innerText = zeldaArray[i].name
+  document.querySelector('h3').innerText = zeldaArray[i].released_date
+  document.querySelector('b').innerText = zeldaArray[i].description
+  i++
+}
+
+let intervalID
+
+let i = 1
+
+function start() {
+  intervalID = setInterval(showDrink, 5000);
+}
+
+function stop() {
+  clearInterval(intervalID);
 }
 
 
