@@ -33,15 +33,21 @@ function zeldaGame () {
 }
 
 function showDrink() {
-  document.querySelector('h2').innerText = zeldaArray[i].name
-  document.querySelector('h3').innerText = zeldaArray[i].released_date
-  document.querySelector('b').innerText = zeldaArray[i].description
-  i++
+  // Check if 'i' has reached the end of the array
+  if (i >= zeldaArray.length) {
+    stop();  // Stop the carousel
+    return;  // Exit the function
+  }
+
+  // Otherwise, continue showing the data
+  document.querySelector('h2').innerText = zeldaArray[i].name;
+  document.querySelector('h3').innerText = zeldaArray[i].released_date;
+  document.querySelector('b').innerText = zeldaArray[i].description;
+  i++;
 }
 
-let intervalID
-
-let i = 1
+let intervalID;
+let i = 0;  // Start from 0 to include the first element
 
 function start() {
   intervalID = setInterval(showDrink, 5000);
@@ -50,6 +56,8 @@ function start() {
 function stop() {
   clearInterval(intervalID);
 }
+
+//============================//
 
 
 // document.querySelector('.click').addEventListener('click', getDrink)
