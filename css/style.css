@@ -446,7 +446,7 @@ body {
 /* ── Characters Grid ─────────────────────────────────── */
 .chars-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 1rem;
 }
 
@@ -454,51 +454,12 @@ body {
   background: var(--dark);
   border: 1px solid var(--border);
   border-radius: 6px;
+  padding: 1.4rem 1.5rem;
   cursor: pointer;
   transition: all 0.25s ease;
   position: relative;
   overflow: hidden;
   animation: fadeUp 0.5s var(--ease-out) both;
-  display: flex;
-  flex-direction: column;
-}
-
-.char-thumb-wrap {
-  width: 100%;
-  height: 120px;
-  overflow: hidden;
-  flex-shrink: 0;
-  background: var(--mid);
-  position: relative;
-}
-
-.char-thumb {
-  width: 100%;
-  height: 100%;
-  background-size: cover;
-  background-position: center top;
-  background-color: var(--surface);
-  opacity: 0.25;
-  transition: opacity 0.4s ease;
-}
-
-.char-thumb.loaded { opacity: 1; }
-
-.char-thumb:not(.loaded)::after {
-  content: '▲';
-  position: absolute;
-  top: 50%; left: 50%;
-  transform: translate(-50%, -50%);
-  font-size: 1.2rem;
-  color: var(--gold-dim);
-  opacity: 0.2;
-}
-
-.char-body {
-  padding: 1.25rem 1.5rem;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
 }
 
 .char-card::after {
@@ -849,21 +810,6 @@ body {
   letter-spacing: 0.12em;
   color: var(--text-muted);
   margin-top: 0.25rem;
-}
-
-.modal-char-img-wrap {
-  margin-bottom: 1.25rem;
-  min-height: 32px;
-}
-
-.modal-char-img {
-  display: block;
-  width: 100px;
-  height: auto;
-  border-radius: 4px;
-  border: 1px solid var(--border-hover);
-  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-  animation: fadeIn 0.4s ease both;
 }
 
 .modal-appearances-list {
