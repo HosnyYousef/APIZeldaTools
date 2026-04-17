@@ -2,8 +2,10 @@
 // API: https://zelda.fanapis.com/api
 // Endpoints used: /games (all), /characters (paginated + search)
 // Response shape: { success: true, count: N, data: [...] }
+// Images: fetched from Wikipedia API thumbnails (no auth required)
 
-const API = 'https://zelda.fanapis.com/api';
+const API      = 'https://zelda.fanapis.com/api';
+const WIKI_API = 'https://en.wikipedia.org/api/rest_v1/page/summary/';
 const CHARS_PER_PAGE = 12;
 
 // ─── STATE ──────────────────────────────────────────────
@@ -16,6 +18,31 @@ let state = {
   charsQuery:  '',
   searchTimer: null,
   allGamesMap: {},  // id → name, for resolving appearance URLs
+  imageCache:  {},  // game name → thumbnail URL
+};
+
+// Maps game names to their Wikipedia article titles (handles redirects/variants)
+const WIKI_TITLES = {
+  'The Legend of Zelda':                          'The_Legend_of_Zelda_(video_game)',
+  'Zelda II: The Adventure of Link':              'Zelda_II:_The_Adventure_of_Link',
+  'The Legend of Zelda: A Link to the Past':      'The_Legend_of_Zelda:_A_Link_to_the_Past',
+  "The Legend of Zelda: Link's Awakening":        "The_Legend_of_Zelda:_Link%27s_Awakening",
+  'The Legend of Zelda: Ocarina of Time':         'The_Legend_of_Zelda:_Ocarina_of_Time',
+  "The Legend of Zelda: Majora's Mask":           "The_Legend_of_Zelda:_Majora%27s_Mask",
+  'The Legend of Zelda: Oracle of Ages':          'The_Legend_of_Zelda:_Oracle_of_Ages',
+  'The Legend of Zelda: Oracle of Seasons':       'The_Legend_of_Zelda:_Oracle_of_Seasons',
+  'The Legend of Zelda: Four Swords':             'The_Legend_of_Zelda:_Four_Swords',
+  'The Legend of Zelda: The Wind Waker':          'The_Legend_of_Zelda:_The_Wind_Waker',
+  'The Legend of Zelda: Four Swords Adventures':  'The_Legend_of_Zelda:_Four_Swords_Adventures',
+  'The Legend of Zelda: The Minish Cap':          'The_Legend_of_Zelda:_The_Minish_Cap',
+  'The Legend of Zelda: Twilight Princess':       'The_Legend_of_Zelda:_Twilight_Princess',
+  'The Legend of Zelda: Phantom Hourglass':       'The_Legend_of_Zelda:_Phantom_Hourglass',
+  'The Legend of Zelda: Spirit Tracks':           'The_Legend_of_Zelda:_Spirit_Tracks',
+  'The Legend of Zelda: Skyward Sword':           'The_Legend_of_Zelda:_Skyward_Sword',
+  'The Legend of Zelda: A Link Between Worlds':   'The_Legend_of_Zelda:_A_Link_Between_Worlds',
+  'The Legend of Zelda: Tri Force Heroes':        'The_Legend_of_Zelda:_Tri_Force_Heroes',
+  'The Legend of Zelda: Breath of the Wild':      'The_Legend_of_Zelda:_Breath_of_the_Wild',
+  'The Legend of Zelda: Tears of the Kingdom':    'The_Legend_of_Zelda:_Tears_of_the_Kingdom',
 };
 
 // ─── DOM ────────────────────────────────────────────────
@@ -59,6 +86,41 @@ async function apiFetch(url) {
   return json;
 }
 
+// ─── WIKIPEDIA IMAGE FETCH ──────────────────────────────
+// Fetches the thumbnail Wikipedia shows in the infobox for each game.
+// Uses the REST summary API — no key needed, returns { thumbnail: { source } }.
+async function fetchGameImage(gameName) {
+  if (state.imageCache[gameName]) return state.imageCache[gameName];
+  const title = WIKI_TITLES[gameName];
+  if (!title) return null;
+  try {
+    const res = await fetch(`${WIKI_API}${title}`, {
+      signal: AbortSignal.timeout(5000),
+      headers: { 'Accept': 'application/json' }
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const url = data?.thumbnail?.source || null;
+    if (url) state.imageCache[gameName] = url;
+    return url;
+  } catch {
+    return null;
+  }
+}
+
+// Fetch all game images in parallel after initial render, then inject into DOM
+async function prefetchGameImages(games) {
+  await Promise.all(games.map(async g => {
+    const url = await fetchGameImage(g.name);
+    if (!url) return;
+    const thumb = document.querySelector(`.game-thumb[data-name="${g.name.replace(/"/g, '\\"')}"]`);
+    if (thumb) {
+      thumb.style.backgroundImage = `url(${url})`;
+      thumb.classList.add('loaded');
+    }
+  }));
+}
+
 // ─── GAMES ──────────────────────────────────────────────
 async function loadGames() {
   try {
@@ -73,6 +135,7 @@ async function loadGames() {
 
     gamesCount.textContent = `${json.data.length} games in the series`;
     renderGames(json.data);
+    prefetchGameImages(json.data); // inject images progressively after render
   } catch (err) {
     gamesList.innerHTML = `
       <div class="error-state">
@@ -91,6 +154,7 @@ function renderGames(games) {
     row.className = 'game-row';
     row.style.setProperty('--i', i);
     row.innerHTML = `
+      <div class="game-thumb" data-name="${game.name.replace(/"/g, '&quot;')}"></div>
       <div class="game-info">
         <div class="game-title">${game.name}</div>
         <div class="game-desc">${game.description || 'No description available.'}</div>
@@ -255,13 +319,16 @@ function initSearch() {
 }
 
 // ─── GAME MODAL ─────────────────────────────────────────
-function openGameModal(game) {
+async function openGameModal(game) {
+  // Render immediately with placeholder, then inject image async
   modalBody.innerHTML = `
-    <div class="modal-game-banner">
-      <div class="modal-triforce-small">
-        <div class="mts-tri mts-top"></div>
-        <div class="mts-tri mts-left"></div>
-        <div class="mts-tri mts-right"></div>
+    <div class="modal-game-banner" id="modal-banner">
+      <div class="modal-game-img-wrap" id="modal-img-wrap">
+        <div class="modal-triforce-small">
+          <div class="mts-tri mts-top"></div>
+          <div class="mts-tri mts-left"></div>
+          <div class="mts-tri mts-right"></div>
+        </div>
       </div>
       <div class="modal-game-title">${game.name}</div>
       <div class="modal-game-pub">${game.publisher || 'Nintendo'}</div>
@@ -291,6 +358,13 @@ function openGameModal(game) {
     </div>
   `;
   openModal();
+
+  // Inject image if available (from cache or fresh fetch)
+  const imgUrl = await fetchGameImage(game.name);
+  const wrap = document.getElementById('modal-img-wrap');
+  if (imgUrl && wrap) {
+    wrap.innerHTML = `<img class="modal-game-img" src="${imgUrl}" alt="${game.name}" />`;
+  }
 }
 
 // ─── CHARACTER MODAL ────────────────────────────────────

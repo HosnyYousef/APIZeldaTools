@@ -342,10 +342,10 @@ body {
 
 .game-row {
   display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: start;
+  grid-template-columns: 56px 1fr auto;
+  align-items: center;
   gap: 1rem;
-  padding: 1.5rem 1.75rem;
+  padding: 1.25rem 1.75rem;
   background: var(--deep);
   cursor: pointer;
   transition: background 0.2s ease;
@@ -372,6 +372,35 @@ body {
 
 .game-row:hover::before {
   transform: scaleY(1);
+}
+
+/* Thumbnail in game row */
+.game-thumb {
+  width: 48px;
+  height: 56px;
+  border-radius: 4px;
+  background: var(--surface);
+  background-size: cover;
+  background-position: center top;
+  flex-shrink: 0;
+  opacity: 0.3;
+  transition: opacity 0.4s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.game-thumb.loaded {
+  opacity: 1;
+}
+
+/* Triforce placeholder inside thumb before image loads */
+.game-thumb:not(.loaded)::after {
+  content: '▲';
+  font-size: 0.6rem;
+  color: var(--gold-dim);
+  opacity: 0.5;
 }
 
 .game-title {
@@ -645,6 +674,21 @@ body {
   pointer-events: none;
 }
 
+.modal-game-img-wrap {
+  margin-bottom: 1.25rem;
+  min-height: 32px;
+}
+
+.modal-game-img {
+  display: block;
+  width: 120px;
+  height: auto;
+  border-radius: 4px;
+  border: 1px solid var(--border-hover);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  animation: fadeIn 0.4s ease both;
+}
+
 .modal-triforce-small {
   position: relative;
   width: 28px;
@@ -865,8 +909,8 @@ body {
 /* Responsive */
 @media (max-width: 600px) {
   .tab-btn { padding: 0.85rem 1.5rem; }
-  .game-row { grid-template-columns: 1fr; }
-  .game-meta { text-align: left; }
+  .game-row { grid-template-columns: 48px 1fr; }
+  .game-meta { display: none; }
   .modal-stats { grid-template-columns: 1fr; }
   .modal-inner { padding: 1.5rem; }
   .modal-game-banner, .modal-char-header { padding: 2rem 1.5rem 1.5rem; }
