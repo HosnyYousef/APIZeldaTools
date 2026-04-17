@@ -1,28 +1,31 @@
 // === HYRULE ARCHIVE — MAIN JS ===
 // API: https://zelda.fanapis.com/api
-// Endpoints used: /games (all), /characters (paginated + search)
+// Endpoints: /games (all), /characters (paginated + search)
 // Response shape: { success: true, count: N, data: [...] }
-// Images: fetched from Wikipedia API thumbnails (no auth required)
+// Images: Wikipedia REST API thumbnails — no key required
 
 const API      = 'https://zelda.fanapis.com/api';
 const WIKI_API = 'https://en.wikipedia.org/api/rest_v1/page/summary/';
-const CHARS_PER_PAGE = 12;
+const CHARS_PER_PAGE = 20;
 
 // ─── STATE ──────────────────────────────────────────────
 let state = {
   games:       [],
   gamesLoaded: false,
-  chars:       [],
+  allChars:    [],   // full character list fetched once on first tab visit
+  allCharsLoaded: false,
+  chars:       [],   // current page slice after filtering
   charsPage:   0,
   charsTotal:  0,
   charsQuery:  '',
   searchTimer: null,
-  allGamesMap: {},  // id → name, for resolving appearance URLs
-  imageCache:  {},  // game name → thumbnail URL
+  allGamesMap: {},
+  imageCache:  {},
 };
 
-// Maps game names to their Wikipedia article titles (handles redirects/variants)
-const WIKI_TITLES = {
+// ─── WIKIPEDIA TITLE MAPS ────────────────────────────────
+
+const GAME_WIKI = {
   'The Legend of Zelda':                          'The_Legend_of_Zelda_(video_game)',
   'Zelda II: The Adventure of Link':              'Zelda_II:_The_Adventure_of_Link',
   'The Legend of Zelda: A Link to the Past':      'The_Legend_of_Zelda:_A_Link_to_the_Past',
@@ -45,6 +48,41 @@ const WIKI_TITLES = {
   'The Legend of Zelda: Tears of the Kingdom':    'The_Legend_of_Zelda:_Tears_of_the_Kingdom',
 };
 
+// Major characters with their own Wikipedia articles
+const CHAR_WIKI = {
+  'Link':              'Link_(The_Legend_of_Zelda)',
+  'Princess Zelda':    'Princess_Zelda',
+  'Ganon':             'Ganon',
+  'Ganondorf':         'Ganon',
+  'Impa':              'Impa',
+  'Midna':             'Midna',
+  'Navi':              'Navi_(The_Legend_of_Zelda)',
+  'Tingle':            'Tingle',
+  'Skull Kid':         'Skull_Kid',
+  'Fi':                'Fi_(The_Legend_of_Zelda)',
+  'Urbosa':            'Urbosa',
+  'Mipha':             'Mipha',
+  'Revali':            'Revali',
+  'Daruk':             'Daruk',
+  'Sidon':             'Sidon_(The_Legend_of_Zelda)',
+  'Purah':             'Purah_(The_Legend_of_Zelda)',
+  'Groose':            'Groose',
+  'Ghirahim':          'Ghirahim',
+  'Zant':              'Zant_(The_Legend_of_Zelda)',
+  'Vaati':             'Vaati_(The_Legend_of_Zelda)',
+  'Agahnim':           'Agahnim',
+  'Great Deku Tree':   'Great_Deku_Tree',
+  'Saria':             'Saria_(The_Legend_of_Zelda)',
+  'Ruto':              'Ruto_(The_Legend_of_Zelda)',
+  'Darunia':           'Darunia',
+  'Nabooru':           'Nabooru',
+  'Rauru':             'Rauru_(The_Legend_of_Zelda)',
+  'Teba':              'Teba_(The_Legend_of_Zelda)',
+  'Yunobo':            'Yunobo',
+  'Malon':             'Malon',
+  'Epona':             'Epona_(The_Legend_of_Zelda)',
+};
+
 // ─── DOM ────────────────────────────────────────────────
 const gamesList    = document.getElementById('games-list');
 const charsGrid    = document.getElementById('chars-grid');
@@ -58,20 +96,15 @@ const charSearch   = document.getElementById('char-search');
 // ─── STARFIELD ──────────────────────────────────────────
 function initStarfield() {
   const field = document.getElementById('starfield');
-  const count = 80;
-  for (let i = 0; i < count; i++) {
+  for (let i = 0; i < 80; i++) {
     const star = document.createElement('div');
     star.className = 'star';
     const size = Math.random() * 2 + 0.5;
     star.style.cssText = `
-      width: ${size}px;
-      height: ${size}px;
-      top: ${Math.random() * 100}%;
-      left: ${Math.random() * 100}%;
-      --dur: ${2 + Math.random() * 4}s;
-      --delay: ${Math.random() * 4}s;
-      --min-op: ${0.05 + Math.random() * 0.1};
-      --max-op: ${0.3 + Math.random() * 0.5};
+      width: ${size}px; height: ${size}px;
+      top: ${Math.random() * 100}%; left: ${Math.random() * 100}%;
+      --dur: ${2 + Math.random() * 4}s; --delay: ${Math.random() * 4}s;
+      --min-op: ${0.05 + Math.random() * 0.1}; --max-op: ${0.3 + Math.random() * 0.5};
     `;
     field.appendChild(star);
   }
@@ -86,38 +119,36 @@ async function apiFetch(url) {
   return json;
 }
 
-// ─── WIKIPEDIA IMAGE FETCH ──────────────────────────────
-// Fetches the thumbnail Wikipedia shows in the infobox for each game.
-// Uses the REST summary API — no key needed, returns { thumbnail: { source } }.
-async function fetchGameImage(gameName) {
-  if (state.imageCache[gameName]) return state.imageCache[gameName];
-  const title = WIKI_TITLES[gameName];
-  if (!title) return null;
+// Fetch a Wikipedia infobox thumbnail for any named entity
+async function fetchWikiImage(name, wikiMap) {
+  if (name in state.imageCache) return state.imageCache[name];
+
+  const title = wikiMap[name];
+  if (!title) { state.imageCache[name] = null; return null; }
+
   try {
     const res = await fetch(`${WIKI_API}${title}`, {
       signal: AbortSignal.timeout(5000),
       headers: { 'Accept': 'application/json' }
     });
-    if (!res.ok) return null;
+    if (!res.ok) { state.imageCache[name] = null; return null; }
     const data = await res.json();
     const url = data?.thumbnail?.source || null;
-    if (url) state.imageCache[gameName] = url;
+    state.imageCache[name] = url;
     return url;
   } catch {
+    state.imageCache[name] = null;
     return null;
   }
 }
 
-// Fetch all game images in parallel after initial render, then inject into DOM
-async function prefetchGameImages(games) {
-  await Promise.all(games.map(async g => {
-    const url = await fetchGameImage(g.name);
+// Fire all image fetches in parallel, inject into matching .{thumbClass}[data-name] elements
+async function prefetchImages(names, wikiMap, thumbClass) {
+  await Promise.all(names.map(async name => {
+    const url = await fetchWikiImage(name, wikiMap);
     if (!url) return;
-    const thumb = document.querySelector(`.game-thumb[data-name="${g.name.replace(/"/g, '\\"')}"]`);
-    if (thumb) {
-      thumb.style.backgroundImage = `url(${url})`;
-      thumb.classList.add('loaded');
-    }
+    const el = document.querySelector(`.${thumbClass}[data-name="${name.replace(/"/g, '\\"')}"]`);
+    if (el) { el.style.backgroundImage = `url(${url})`; el.classList.add('loaded'); }
   }));
 }
 
@@ -127,20 +158,15 @@ async function loadGames() {
     const json = await apiFetch(`${API}/games?limit=100`);
     state.games = json.data;
     state.gamesLoaded = true;
-
-    // Populate allGamesMap from game IDs in URL form
-    state.games.forEach(g => {
-      state.allGamesMap[g.id] = g.name;
-    });
-
+    state.games.forEach(g => { state.allGamesMap[g.id] = g.name; });
     gamesCount.textContent = `${json.data.length} games in the series`;
     renderGames(json.data);
-    prefetchGameImages(json.data); // inject images progressively after render
+    prefetchImages(json.data.map(g => g.name), GAME_WIKI, 'game-thumb');
   } catch (err) {
     gamesList.innerHTML = `
       <div class="error-state">
         <strong>Could not reach the API</strong>
-        <p>Check your connection or try again — zelda.fanapis.com may be temporarily unavailable.</p>
+        <p>Check your connection — zelda.fanapis.com may be temporarily unavailable.</p>
       </div>`;
     console.error('Games fetch failed:', err);
   }
@@ -148,7 +174,6 @@ async function loadGames() {
 
 function renderGames(games) {
   gamesList.innerHTML = '';
-
   games.forEach((game, i) => {
     const row = document.createElement('div');
     row.className = 'game-row';
@@ -170,49 +195,84 @@ function renderGames(games) {
 }
 
 function cleanDate(raw) {
-  if (!raw) return '—';
-  return raw.trim().replace(/^\s+/, '');
+  return raw ? raw.trim() : '—';
 }
 
 // ─── CHARACTERS ─────────────────────────────────────────
-async function loadChars(page = 0, query = '') {
-  charsGrid.innerHTML = `
-    <div class="loading-state">
-      <div class="triforce-loader">
-        <div class="tl-tri tl-top"></div>
-        <div class="tl-tri tl-left"></div>
-        <div class="tl-tri tl-right"></div>
-      </div>
-      <p>Consulting the sages...</p>
-    </div>
-  `;
-  pagination.innerHTML = '';
+// Strategy: fetch ALL characters once (paginating through the API),
+// store in state.allChars, then filter/paginate entirely client-side.
+// This makes search fully case-insensitive with no API dependency.
 
-  try {
-    const params = new URLSearchParams({
-      limit: CHARS_PER_PAGE,
-      page,
-      ...(query ? { name: query } : {})
-    });
+async function fetchAllChars() {
+  const pageSize = 50; // fetch in batches of 50
+  let page = 0;
+  let collected = [];
 
-    const json = await apiFetch(`${API}/characters?${params}`);
-    state.chars = json.data;
-    state.charsPage = page;
-    state.charsTotal = json.count;
+  // First fetch to get total count
+  const first = await apiFetch(`${API}/characters?limit=${pageSize}&page=0`);
+  collected = collected.concat(first.data);
+  const total = first.count;
+  const totalPages = Math.ceil(total / pageSize);
 
-    const totalPages = Math.ceil(json.count / CHARS_PER_PAGE);
-    charsCount.textContent = `${json.count} character${json.count !== 1 ? 's' : ''}${query ? ` matching "${query}"` : ''}`;
-
-    renderChars(json.data);
-    renderPagination(page, totalPages);
-  } catch (err) {
-    charsGrid.innerHTML = `
-      <div class="error-state" style="grid-column: 1/-1;">
-        <strong>Could not reach the API</strong>
-        <p>zelda.fanapis.com may be temporarily unavailable.</p>
-      </div>`;
-    console.error('Characters fetch failed:', err);
+  // Fetch remaining pages in parallel
+  if (totalPages > 1) {
+    const remaining = Array.from({ length: totalPages - 1 }, (_, i) => i + 1);
+    const results = await Promise.all(
+      remaining.map(p => apiFetch(`${API}/characters?limit=${pageSize}&page=${p}`).catch(() => ({ data: [] })))
+    );
+    results.forEach(r => { collected = collected.concat(r.data); });
   }
+
+  return collected;
+}
+
+async function loadChars(page = 0, query = '') {
+  // Show loading only on first ever load
+  if (!state.allCharsLoaded) {
+    charsGrid.innerHTML = `
+      <div class="loading-state">
+        <div class="triforce-loader">
+          <div class="tl-tri tl-top"></div>
+          <div class="tl-tri tl-left"></div>
+          <div class="tl-tri tl-right"></div>
+        </div>
+        <p>Consulting the sages...</p>
+      </div>
+    `;
+    pagination.innerHTML = '';
+
+    try {
+      state.allChars = await fetchAllChars();
+      state.allCharsLoaded = true;
+    } catch (err) {
+      charsGrid.innerHTML = `
+        <div class="error-state" style="grid-column: 1/-1;">
+          <strong>Could not reach the API</strong>
+          <p>zelda.fanapis.com may be temporarily unavailable.</p>
+        </div>`;
+      console.error('Characters fetch failed:', err);
+      return;
+    }
+  }
+
+  // Client-side filter — fully case-insensitive, no API needed
+  const q = query.trim().toLowerCase();
+  const filtered = q
+    ? state.allChars.filter(c => c.name.toLowerCase().includes(q))
+    : state.allChars;
+
+  state.charsPage  = page;
+  state.charsTotal = filtered.length;
+  state.charsQuery = query;
+
+  const totalPages = Math.ceil(filtered.length / CHARS_PER_PAGE);
+  const pageSlice  = filtered.slice(page * CHARS_PER_PAGE, (page + 1) * CHARS_PER_PAGE);
+
+  charsCount.textContent = `${filtered.length} character${filtered.length !== 1 ? 's' : ''}${q ? ` matching "${query}"` : ''}`;
+
+  renderChars(pageSlice);
+  renderPagination(page, totalPages);
+  prefetchImages(pageSlice.map(c => c.name), CHAR_WIKI, 'char-thumb');
 }
 
 function renderChars(chars) {
@@ -230,14 +290,17 @@ function renderChars(chars) {
     const apps = char.appearances?.length || 0;
 
     card.innerHTML = `
-      <div class="char-race-tag">${race}</div>
-      <div class="char-name">${char.name}</div>
-      <div class="char-desc">${char.description || 'No description available.'}</div>
-      <div class="char-footer">
-        <span class="char-appearances">
-          ${apps} game appearance${apps !== 1 ? 's' : ''}
-        </span>
-        <span class="char-cta">View →</span>
+      <div class="char-thumb-wrap">
+        <div class="char-thumb" data-name="${char.name.replace(/"/g, '&quot;')}"></div>
+      </div>
+      <div class="char-body">
+        <div class="char-race-tag">${race}</div>
+        <div class="char-name">${char.name}</div>
+        <div class="char-desc">${char.description || 'No description available.'}</div>
+        <div class="char-footer">
+          <span class="char-appearances">${apps} game appearance${apps !== 1 ? 's' : ''}</span>
+          <span class="char-cta">View →</span>
+        </div>
       </div>
     `;
     card.addEventListener('click', () => openCharModal(char));
@@ -245,6 +308,7 @@ function renderChars(chars) {
   });
 }
 
+// ─── PAGINATION ──────────────────────────────────────────
 function renderPagination(currentPage, totalPages) {
   pagination.innerHTML = '';
   if (totalPages <= 1) return;
@@ -253,29 +317,21 @@ function renderPagination(currentPage, totalPages) {
   prev.className = 'page-btn';
   prev.textContent = '← Prev';
   prev.disabled = currentPage === 0;
-  prev.addEventListener('click', () => {
-    loadChars(currentPage - 1, state.charsQuery);
-    scrollToChars();
-  });
+  prev.addEventListener('click', () => { loadChars(currentPage - 1, state.charsQuery); scrollToChars(); });
   pagination.appendChild(prev);
 
-  // Show a window of page buttons
-  const range = buildPageRange(currentPage, totalPages);
-  range.forEach(p => {
+  buildPageRange(currentPage, totalPages).forEach(p => {
     if (p === '…') {
-      const ellipsis = document.createElement('span');
-      ellipsis.textContent = '…';
-      ellipsis.style.cssText = 'color: var(--text-muted); padding: 0 0.25rem; font-size: 0.8rem;';
-      pagination.appendChild(ellipsis);
+      const el = document.createElement('span');
+      el.textContent = '…';
+      el.style.cssText = 'color: var(--text-muted); padding: 0 0.25rem; font-size: 0.8rem;';
+      pagination.appendChild(el);
       return;
     }
     const btn = document.createElement('button');
     btn.className = `page-btn${p === currentPage ? ' active' : ''}`;
     btn.textContent = p + 1;
-    btn.addEventListener('click', () => {
-      loadChars(p, state.charsQuery);
-      scrollToChars();
-    });
+    btn.addEventListener('click', () => { loadChars(p, state.charsQuery); scrollToChars(); });
     pagination.appendChild(btn);
   });
 
@@ -283,24 +339,15 @@ function renderPagination(currentPage, totalPages) {
   next.className = 'page-btn';
   next.textContent = 'Next →';
   next.disabled = currentPage >= totalPages - 1;
-  next.addEventListener('click', () => {
-    loadChars(currentPage + 1, state.charsQuery);
-    scrollToChars();
-  });
+  next.addEventListener('click', () => { loadChars(currentPage + 1, state.charsQuery); scrollToChars(); });
   pagination.appendChild(next);
 }
 
 function buildPageRange(current, total) {
-  if (total <= 7) return Array.from({ length: total }, (_, i) => i);
-  const range = [];
-  if (current <= 3) {
-    range.push(0, 1, 2, 3, 4, '…', total - 1);
-  } else if (current >= total - 4) {
-    range.push(0, '…', total - 5, total - 4, total - 3, total - 2, total - 1);
-  } else {
-    range.push(0, '…', current - 1, current, current + 1, '…', total - 1);
-  }
-  return range;
+  if (total <= 7)           return Array.from({ length: total }, (_, i) => i);
+  if (current <= 3)         return [0, 1, 2, 3, 4, '…', total - 1];
+  if (current >= total - 4) return [0, '…', total - 5, total - 4, total - 3, total - 2, total - 1];
+  return [0, '…', current - 1, current, current + 1, '…', total - 1];
 }
 
 function scrollToChars() {
@@ -308,21 +355,21 @@ function scrollToChars() {
 }
 
 // ─── SEARCH ─────────────────────────────────────────────
+// Filtering is 100% client-side so case never matters.
+// zelda / ZELDA / ZeLdA all hit the same .toLowerCase().includes() check.
 function initSearch() {
   charSearch.addEventListener('input', () => {
     clearTimeout(state.searchTimer);
     state.searchTimer = setTimeout(() => {
-      state.charsQuery = charSearch.value.trim();
-      loadChars(0, state.charsQuery);
-    }, 400); // debounce
+      loadChars(0, charSearch.value);
+    }, 200); // snappier since no network call
   });
 }
 
 // ─── GAME MODAL ─────────────────────────────────────────
 async function openGameModal(game) {
-  // Render immediately with placeholder, then inject image async
   modalBody.innerHTML = `
-    <div class="modal-game-banner" id="modal-banner">
+    <div class="modal-game-banner">
       <div class="modal-game-img-wrap" id="modal-img-wrap">
         <div class="modal-triforce-small">
           <div class="mts-tri mts-top"></div>
@@ -336,7 +383,6 @@ async function openGameModal(game) {
     <div class="modal-inner">
       <div class="modal-section-label">About</div>
       <div class="modal-description">${game.description || 'No description available.'}</div>
-
       <div class="modal-stats">
         <div class="modal-stat">
           <div class="modal-stat-label">Released</div>
@@ -359,8 +405,7 @@ async function openGameModal(game) {
   `;
   openModal();
 
-  // Inject image if available (from cache or fresh fetch)
-  const imgUrl = await fetchGameImage(game.name);
+  const imgUrl = await fetchWikiImage(game.name, GAME_WIKI);
   const wrap = document.getElementById('modal-img-wrap');
   if (imgUrl && wrap) {
     wrap.innerHTML = `<img class="modal-game-img" src="${imgUrl}" alt="${game.name}" />`;
@@ -368,20 +413,26 @@ async function openGameModal(game) {
 }
 
 // ─── CHARACTER MODAL ────────────────────────────────────
-function openCharModal(char) {
-  const race   = char.race || 'Unknown race';
+async function openCharModal(char) {
+  const race   = char.race   || 'Unknown race';
   const gender = char.gender || null;
   const apps   = char.appearances || [];
 
-  // Build appearance tags — resolve game names if we have them loaded
   const appTags = apps.map(url => {
-    const id = url.split('/').pop();
+    const id   = url.split('/').pop();
     const name = state.allGamesMap[id];
     return `<span class="modal-game-tag${name ? ' resolved' : ''}">${name || id}</span>`;
   }).join('');
 
   modalBody.innerHTML = `
     <div class="modal-char-header">
+      <div class="modal-char-img-wrap" id="modal-char-img-wrap">
+        <div class="modal-triforce-small">
+          <div class="mts-tri mts-top"></div>
+          <div class="mts-tri mts-left"></div>
+          <div class="mts-tri mts-right"></div>
+        </div>
+      </div>
       <div class="modal-char-race">${race}</div>
       <div class="modal-char-name">${char.name}</div>
       ${gender ? `<div class="modal-char-gender">${gender}</div>` : ''}
@@ -389,7 +440,6 @@ function openCharModal(char) {
     <div class="modal-inner">
       <div class="modal-section-label">Description</div>
       <div class="modal-description">${char.description || 'No description available.'}</div>
-
       ${apps.length ? `
         <div class="modal-section-label">Appears in</div>
         <div class="modal-appearances-list">${appTags}</div>
@@ -399,14 +449,17 @@ function openCharModal(char) {
 
   openModal();
 
-  // Resolve game names async if not yet loaded
-  if (apps.length && !state.gamesLoaded) {
-    resolveAppearances(char, apps);
+  // Inject character image if we have one
+  const imgUrl = await fetchWikiImage(char.name, CHAR_WIKI);
+  const wrap = document.getElementById('modal-char-img-wrap');
+  if (imgUrl && wrap) {
+    wrap.innerHTML = `<img class="modal-char-img" src="${imgUrl}" alt="${char.name}" />`;
   }
+
+  if (apps.length && !state.gamesLoaded) resolveAppearances(apps);
 }
 
-// Fetch any unresolved game names and update the tags
-async function resolveAppearances(char, apps) {
+async function resolveAppearances(apps) {
   const tags = document.querySelectorAll('.modal-game-tag:not(.resolved)');
   await Promise.all(apps.map(async (url, i) => {
     const id = url.split('/').pop();
@@ -416,12 +469,9 @@ async function resolveAppearances(char, apps) {
       const name = json.data?.[0]?.name || json.data?.name;
       if (name) {
         state.allGamesMap[id] = name;
-        if (tags[i]) {
-          tags[i].textContent = name;
-          tags[i].classList.add('resolved');
-        }
+        if (tags[i]) { tags[i].textContent = name; tags[i].classList.add('resolved'); }
       }
-    } catch { /* silently skip */ }
+    } catch { /* skip */ }
   }));
 }
 
@@ -438,19 +488,14 @@ function closeModal() {
 
 function initModal() {
   document.getElementById('modal-close').addEventListener('click', closeModal);
-  modalOverlay.addEventListener('click', e => {
-    if (e.target === modalOverlay) closeModal();
-  });
-  document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') closeModal();
-  });
+  modalOverlay.addEventListener('click', e => { if (e.target === modalOverlay) closeModal(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 }
 
 // ─── TABS ────────────────────────────────────────────────
 function initTabs() {
   const tabs   = document.querySelectorAll('.tab-btn');
   const panels = document.querySelectorAll('.tab-panel');
-
   tabs.forEach(btn => {
     btn.addEventListener('click', () => {
       const target = btn.dataset.tab;
@@ -458,11 +503,7 @@ function initTabs() {
       panels.forEach(p => p.classList.remove('active'));
       btn.classList.add('active');
       document.getElementById(`tab-${target}`).classList.add('active');
-
-      // Lazy-load characters tab on first visit
-      if (target === 'characters' && !state.chars.length) {
-        loadChars(0);
-      }
+      if (target === 'characters' && !state.chars.length) loadChars(0);
     });
   });
 }
@@ -473,7 +514,7 @@ function init() {
   initTabs();
   initModal();
   initSearch();
-  loadGames(); // load games tab immediately (it's the default)
+  loadGames();
 }
 
 document.addEventListener('DOMContentLoaded', init);
