@@ -70,85 +70,7 @@
             aria-label="Search characters"
           />
         </div>
-        <p class="panel-count" id="chars-count"></p>
-      </div>
-      <div class="chars-grid" id="chars-grid">
-        <div class="loading-state" id="chars-loading">
-          <div class="triforce-loader">
-            <div class="tl-tri tl-top"></div>
-            <div class="tl-tri tl-left"></div>
-            <div class="tl-tri tl-right"<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Hyrule Archive — The Legend of Zelda API</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=MedievalSharp&family=Cinzel:wght@400;600;700&family=Crimson+Pro:ital,wght@0,300;0,400;0,500;1,300;1,400&family=DM+Mono:wght@300;400&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/normalize.css" />
-  <link rel="stylesheet" href="css/style.css" />
-</head>
-<body>
-
-  <div class="vignette" aria-hidden="true"></div>
-  <div class="starfield" aria-hidden="true" id="starfield"></div>
-
-  <header class="site-header">
-    <div class="triforce" aria-hidden="true">
-      <div class="tri tri-top"></div>
-      <div class="tri tri-left"></div>
-      <div class="tri tri-right"></div>
-    </div>
-    <h1 class="site-title">Hyrule Archive</h1>
-    <p class="site-subtitle">An atlas of the Legend of Zelda universe</p>
-    <div class="header-rule">
-      <span class="rule-diamond">◆</span>
-    </div>
-  </header>
-
-  <nav class="tab-nav" aria-label="Sections">
-    <button class="tab-btn active" data-tab="games">
-      <span class="tab-icon">⚔</span> Games
-    </button>
-    <button class="tab-btn" data-tab="characters">
-      <span class="tab-icon">👁</span> Characters
-    </button>
-  </nav>
-
-  <main class="main-content">
-
-    <!-- GAMES TAB -->
-    <section class="tab-panel active" id="tab-games" aria-label="Games">
-      <div class="panel-intro">
-        <p class="panel-count" id="games-count"></p>
-      </div>
-      <div class="games-list" id="games-list">
-        <div class="loading-state" id="games-loading">
-          <div class="triforce-loader" aria-label="Loading">
-            <div class="tl-tri tl-top"></div>
-            <div class="tl-tri tl-left"></div>
-            <div class="tl-tri tl-right"></div>
-          </div>
-          <p>Reading the Triforce...</p>
-        </div>
-      </div>
-    </section>
-
-    <!-- CHARACTERS TAB -->
-    <section class="tab-panel" id="tab-characters" aria-label="Characters">
-      <div class="panel-intro">
-        <div class="search-wrap">
-          <span class="search-icon" aria-hidden="true">⌖</span>
-          <input
-            type="text"
-            id="char-search"
-            class="search-input"
-            placeholder="Search by name..."
-            autocomplete="off"
-            aria-label="Search characters"
-          />
-        </div>
+        <p class="search-hint">Search is case-sensitive — try "Link" not "link"</p>
         <p class="panel-count" id="chars-count"></p>
       </div>
       <div class="chars-grid" id="chars-grid">
@@ -157,31 +79,6 @@
             <div class="tl-tri tl-top"></div>
             <div class="tl-tri tl-left"></div>
             <div class="tl-tri tl-right"></div>
-          </div>
-          <p>Consulting the sages...</p>
-        </div>
-      </div>
-      <div class="pagination" id="pagination"></div>
-    </section>
-
-  </main>
-
-  <!-- DETAIL MODAL -->
-  <div class="modal-overlay" id="modal-overlay" role="dialog" aria-modal="true">
-    <div class="modal" id="modal">
-      <button class="modal-close" id="modal-close" aria-label="Close">✕</button>
-      <div class="modal-body" id="modal-body"></div>
-    </div>
-  </div>
-
-  <footer class="site-footer">
-    <p>Data from <a href="https://zelda.fanapis.com" target="_blank" rel="noopener">zelda.fanapis.com</a></p>
-    <p>Built by <a href="https://github.com/HosnyYousef" target="_blank" rel="noopener">HosnyYousef</a> · Not affiliated with Nintendo</p>
-  </footer>
-
-  <script src="js/main.js"></script>
-</body>
-</html>></div>
           </div>
           <p>Consulting the sages...</p>
         </div>
